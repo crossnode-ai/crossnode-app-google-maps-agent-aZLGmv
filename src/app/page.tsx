@@ -1,103 +1,215 @@
-import Image from "next/image";
+src/app/page.tsx
+typescript
+"use client";
 
-export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
+import { useState, useCallback } from "react";
+import { useSession } from "next-auth/react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Spinner } from "@/components/ui/spinner";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertTriangle, Map } from "lucide-react";
+
+// Define the structure of the response from the agent API
+interface AgentResponse {
+  text?: string;
+  coordinates?: { lat: number; lng: number };
+  route?: any; // Placeholder for route details
+  mapHtml?: string;
+}
+
+const AGENT_ID = "45df3b25-b49b-464f-b45e-894b994266bb";
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+export default function HomePage() {
+  const { data: session, status } = useSession();
+  const [query, setQuery] = useState<string>("");
+  const [response, setResponse] = useState<AgentResponse | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = useCallback(async () => {
+    if (!query.trim()) return;
+    if (!API_URL) {
+      setError("API URL is not configured.");
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    setResponse(null);
+
+    try {
+      const res = await fetch(`${API_URL}/agent/${AGENT_ID}/invoke`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.user?.access_token || ""}`,
+        },
+        body: JSON.stringify({
+          input: query,
+          // You might want to pass session data or other context here
+          // context: { userId: session?.user?.id }
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || `HTTP error! status: ${res.status}`);
+      }
+
+      const data: AgentResponse = await res.json();
+      setResponse(data);
+    } catch (err) {
+      console.error("Failed to fetch from agent:", err);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("An unknown error occurred.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [query, session]);
+
+  const renderMap = () => {
+    if (response?.mapHtml) {
+      return (
+        <div
+          className="w-full aspect-video rounded-lg overflow-hidden"
+          dangerouslySetInnerHTML={{ __html: response.mapHtml }}
         />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+      );
+    }
+    if (response?.coordinates) {
+      // Basic fallback if mapHtml is not provided but coordinates are
+      // In a real app, you'd likely use a dedicated map component here
+      return (
+        <div className="w-full aspect-video rounded-lg overflow-hidden flex items-center justify-center bg-gray-200 dark:bg-gray-700">
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            Map for: {response.coordinates.lat}, {response.coordinates.lng}
+          </p>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <main className="container mx-auto py-12 px-4 md:px-6">
+      <div className="flex flex-col items-center justify-center text-center mb-12">
+        <h1 className="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl mb-4">
+          Google Maps Agent
+        </h1>
+        <p className="text-lg text-muted-foreground max-w-2xl">
+          Explore locations, get directions, and discover points of interest with our intelligent Google Maps agent.
+        </p>
+      </div>
+
+      <div className="flex flex-col md:flex-row gap-6 items-start">
+        <div className="w-full md:w-1/2 lg:w-1/3">
+          <Card className="shadow-lg">
+            <CardHeader>
+              <CardTitle>Enter your query</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <Input
+                  type="text"
+                  placeholder="e.g., 'Find the nearest coffee shop' or 'Directions from Eiffel Tower to Louvre'"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleSubmit();
+                    }
+                  }}
+                  disabled={isLoading || status === "loading"}
+                  className="w-full"
+                />
+                <Button
+                  onClick={handleSubmit}
+                  disabled={isLoading || status === "loading" || !query.trim()}
+                  className="w-full"
+                >
+                  {isLoading ? <Spinner className="h-4 w-4 mr-2" /> : <Map className="h-4 w-4 mr-2" />}
+                  {isLoading ? "Processing..." : "Get Information"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="w-full md:w-1/2 lg:w-2/3">
+          <AnimatePresence>
+            {isLoading && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex items-center justify-center h-full min-h-[300px] bg-muted rounded-lg shadow-lg"
+              >
+                <Spinner className="h-12 w-12" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
+              >
+                <Alert variant="destructive" className="shadow-lg">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Error</AlertTitle>
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {response && !isLoading && !error && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
+              >
+                <Card className="shadow-lg">
+                  <CardHeader>
+                    <CardTitle>Agent Response</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {response.text && (
+                      <div className="prose max-w-none">
+                        <p>{response.text}</p>
+                      </div>
+                    )}
+                    {renderMap()}
+                    {response.route && (
+                      <div className="mt-4 p-4 bg-secondary rounded-md">
+                        <h3 className="font-semibold mb-2">Route Details:</h3>
+                        <pre className="text-xs overflow-x-auto whitespace-pre-wrap">
+                          {JSON.stringify(response.route, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+                    {!response.text && !response.mapHtml && !response.route && (
+                      <p className="text-muted-foreground">No specific information to display.</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+    </main>
   );
 }
